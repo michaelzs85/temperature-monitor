@@ -12,5 +12,5 @@ Yet another temperature monitor:
  * probably 4.7KΩ as 1-Wire pull-up
  * pins and socket
 
-![parts 01](https://raw.githubusercontent.com/rubienr/temperature-monitor/parts-01.jpg)
-![parts 02](https://raw.githubusercontent.com/rubienr/temperature-monitor/parts-02.jpg)
+![parts 01](https://raw.githubusercontent.com/rubienr/temperature-monitor/images/parts-01.jpg)
+![parts 02](https://raw.githubusercontent.com/rubienr/temperature-monitor/images/parts-02.jpg)
