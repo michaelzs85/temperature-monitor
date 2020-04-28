@@ -5,7 +5,7 @@
 namespace
 {
 template <typename vec_t>
-bool push_back_unique(vec_t vector, const typename vec_t::value_type &value)
+bool push_back_unique(vec_t &vector, const typename vec_t::value_type &value)
 {
     if(std::none_of(begin(vector), end(vector), [&value](const typename vec_t::value_type &existing_value) {
            return existing_value == value;
@@ -45,7 +45,7 @@ template <typename string_t, typename ret_t, typename arg_t> struct ChatBot
 
     bool add(string_t command, std::function<ret_t(arg_t)> callback)
     {
-        return push_back_unique(commands, Command(command, string_t("Help!"), callback));
+        return push_back_unique(commands, Command(command, string_t{}, callback));
     }
 
     bool add(string_t command, string_t help_text, std::function<ret_t(arg_t)> callback)

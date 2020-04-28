@@ -12,7 +12,7 @@
 #include <ChatBot.hpp>
 #include <unordered_set>
 
-static String const bot_token{ "1295314241:AAFR5AxoiUhOVm7CDDIqkRJIeUiZ1s3LxHM" };
+#include <FS.h>
 
 struct
 {
@@ -55,11 +55,31 @@ struct
         // 20dBm corresponds to 100 mW
         WiFi.setOutputPower(10);
 
+        if(!SPIFFS.begin())
+        {
+            while(true)
+                Serial.println("FS im Arsch!");
+        }
+
+        // File token_file = SPIFFS.open(String("tgrmtoken"), "w");
+        // token_file.println(bot_token);
+        // token_file.flush();
+        // token_file.close();
+
+        File token_file = SPIFFS.open(String("tgrmtoken"), "r");
+        String bot_token = token_file.readStringUntil('\n');
+        bot_token.remove(bot_token.length()-1);
+        Serial.println("Read bot token: " + bot_token);
         tbot.setTelegramToken(bot_token);
+
+        setup_options();
+
+        SPIFFS.end();
     }
 
     void loop()
     {
+        handleTelegramMessages();
         float temp = getTemperatureCelsius();
         if(temp > 30.0f)
         {
@@ -70,7 +90,6 @@ struct
         {
             tbot.sendMessage(registered_user, String(temp));
         }
-        handleTelegramMessages();
         delay(10000);
         // process: enable wifi, notify, disable wifi
         // (deep) sleep
@@ -102,16 +121,15 @@ private:
                          "/register and /unregister" };
             tbot.sendMessage(msg.sender.id, text);
         });
-        cb.add("/register", "Register to get temperature updates.",
-               [&](const TBMessage &msg) {
-                   if(registered_ids.insert(msg.sender.id).second)
-                   {
-                       tbot.sendMessage(msg.sender.id,
-                                        "You have now been registered to get temperature updates!");
-                       Serial.print("A new user has been registered: ");
-                       Serial.print(msg.sender.id);
-                   }
-               });
+        cb.add("/register", "Register to get temperature updates.", [&](const TBMessage &msg) {
+            if(registered_ids.insert(msg.sender.id).second)
+            {
+                tbot.sendMessage(msg.sender.id,
+                                 "You have now been registered to get temperature updates!");
+                Serial.print("A new user has been registered: ");
+                Serial.print(msg.sender.id);
+            }
+        });
         cb.add("/unregister", "Don't get any more temperature updates.", [&](const TBMessage &msg) {
             auto it = registered_ids.find(msg.sender.id);
             if(it != end(registered_ids))
