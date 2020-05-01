@@ -9,10 +9,17 @@
 #include <OneWire.h>
 
 #include <CTBot.h>
-#include <ChatBot.hpp>
+#include <Chatter.hpp>
 #include <unordered_set>
 
 #include <FS.h>
+#include <ArduinoJson.hpp>
+
+
+struct ProjectConfig
+{
+    String bot_token;
+};
 
 struct
 {
@@ -27,7 +34,7 @@ struct
     uint8_t temperature_sensor_address{ 0xff };
 
     CTBot tbot;
-    ChatBot<String, void, const TBMessage &> cb;
+    Chatter<String, void, const TBMessage &> cb;
 
     void setup()
     {
@@ -55,26 +62,16 @@ struct
         // 20dBm corresponds to 100 mW
         WiFi.setOutputPower(10);
 
-        if(!SPIFFS.begin())
-        {
-            while(true)
-                Serial.println("FS im Arsch!");
-        }
-
-        // File token_file = SPIFFS.open(String("tgrmtoken"), "w");
-        // token_file.println(bot_token);
-        // token_file.flush();
-        // token_file.close();
-
-        File token_file = SPIFFS.open(String("tgrmtoken"), "r");
-        String bot_token = token_file.readStringUntil('\n');
-        bot_token.remove(bot_token.length()-1);
-        Serial.println("Read bot token: " + bot_token);
-        tbot.setTelegramToken(bot_token);
-
-        setup_options();
-
+        // load project configuration
+        if(!SPIFFS.begin()) Serial.println("Error: File System not ready!");
+        ProjectConfig cfg = load_config(F("/config.json"));
         SPIFFS.end();
+        
+        // configure telegram bot
+        tbot.setTelegramToken(cfg.bot_token);
+
+        add_chatbot_cmds();
+
     }
 
     void loop()
@@ -102,6 +99,22 @@ private:
         return temp_sensors.getTempC(&temperature_sensor_address);
     }
 
+    ProjectConfig load_config(const String& filename)
+    {
+        ProjectConfig cfg;
+
+        File cfgfile = SPIFFS.open(filename, "r");
+        StaticJsonBuffer<512> json_bfr;
+
+        JsonObject &json_doc = json_bfr.parseObject(cfgfile);
+        if(!json_doc.success())
+            Serial.println(F("Failed to read configuratiomn file!"));
+
+        cfg.bot_token = json_doc["bot_token"] | "MISSING_TOKEN";
+
+        cfgfile.close();
+        return cfg;
+    }
 
     std::unordered_set<int32_t> registered_ids;
 
@@ -114,7 +127,7 @@ private:
         }
     }
 
-    void setup_options()
+    void add_chatbot_cmds()
     {
         cb.add("/start", [&](const TBMessage &msg) {
             String text{ "Welcome to TemperatureMonitor!\ncurrently supported commands are: "
