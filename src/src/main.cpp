@@ -20,7 +20,7 @@ const char* jname_too_cold PROGMEM= "too_cold";
 const char* jname_too_hot PROGMEM  = "too_hot";
 const char* msg_file_system_error PROGMEM = "Error: File System not ready!";
 
-static const uint32_t time_between_warnings_ms = 1000 * 60 * 5; // = 5min
+static const uint32_t time_between_warnings_ms = 1000 * 60 * 1; // = 1min
 
 struct ProjectConfig
 {
@@ -32,6 +32,12 @@ struct User
     int32_t user_id;
     float too_cold;
     float too_hot;
+};
+
+struct MonitorData
+{
+    int32_t user_id;
+    int32_t msg_id;
 };
 
 bool same_id(const User &lhs, const User &rhs) { return lhs.user_id == rhs.user_id; }
@@ -65,9 +71,9 @@ float configureTemp(CTBot &tbot, decltype(TBContact::id) recipient, float init, 
     // Set up the temperature keyboard
     CTBotInlineKeyboard kbd;
     kbd.addButton("-1", "dec", CTBotKeyboardButtonQuery);
-    kbd.addButton("-.1", "dec.1", CTBotKeyboardButtonQuery);
+    kbd.addButton("-.5", "dec.5", CTBotKeyboardButtonQuery);
     kbd.addButton("OK", "accept", CTBotKeyboardButtonQuery);
-    kbd.addButton("+.1", "inc.1", CTBotKeyboardButtonQuery);
+    kbd.addButton("+.5", "inc.5", CTBotKeyboardButtonQuery);
     kbd.addButton("+1", "inc", CTBotKeyboardButtonQuery);
     String kbdjson = kbd.getJSON();
 
@@ -90,12 +96,12 @@ float configureTemp(CTBot &tbot, decltype(TBContact::id) recipient, float init, 
             }
             if(msg.callbackQueryData == F("dec"))
                 init -= 1.0f;
-            else if(msg.callbackQueryData == F("dec.1"))
-                init -= .1f;
+            else if(msg.callbackQueryData == F("dec.5"))
+                init -= .5f;
             else if(msg.callbackQueryData == F("accept"))
                 config_finished = true;
-            else if(msg.callbackQueryData == F("inc.1"))
-                init += 0.1f;
+            else if(msg.callbackQueryData == F("inc.5"))
+                init += 0.5f;
             else if(msg.callbackQueryData == F("inc"))
                 init += 1.0f;
             if(!config_finished)
@@ -179,6 +185,7 @@ struct
         curtemp = getTemperatureCelsius();
         Serial.println(curtemp);
         handleRegisteredUsers(curtemp);
+        handleMonitoringUsers(curtemp);
         delay(10000);
         // process: enable wifi, notify, disable wifi
         // (deep) sleep
@@ -211,13 +218,21 @@ private:
     std::vector<User> registered_users;
     std::map<decltype(User::user_id), int64_t> last_warning;
     float curtemp;
+    std::vector<MonitorData> monitorings;
+
 
     void handleTelegramMessages()
     {
         TBMessage msg;
         while(tbot.getNewMessage(msg))
         {
-            cb.handle_incomoing_message(msg.text, msg);
+            if(msg.messageType == CTBotMessageType::CTBotMessageText)
+                cb.handle_incomoing_message(msg.text, msg);
+            else if (msg.messageType == CTBotMessageType::CTBotMessageQuery)
+            {
+                cb.handle_incomoing_message(msg.callbackQueryData, msg);
+            }
+            
         }
     }
 
@@ -241,6 +256,26 @@ private:
                 tbot.sendMessage(usr.user_id, String("⚠️ Temperature Warning! 🔥") + String(temp) + "°C");
                 last_warning[usr.user_id] = now;
             }
+            yield();
+        }
+    }
+
+    void handleMonitoringUsers(float temp)
+    {
+        CTBotInlineKeyboard kbd;
+        kbd.addButton("Stop Monitoring", "monitor_stop", CTBotKeyboardButtonQuery);
+        String text = "Live Temperature: " + String(temp) + "°C";
+        for(MonitorData& md : monitorings)
+        {
+            if (md.msg_id == 0)
+            {
+                md.msg_id = tbot.sendMessage(md.user_id, text, kbd); 
+            }
+            else
+            {
+                tbot.editMessage(md.user_id, md.msg_id, text, kbd);
+            }
+            yield();
         }
     }
 
@@ -250,6 +285,7 @@ private:
             String text{"Welcome to TemperatureMonitor!\ncurrently supported commands are:\n"};
             for(auto cmd :cb.commands)
             {
+                if(cmd.help_text.isEmpty()) continue;
                 text += cmd.cmd_text + ' ' + cmd.help_text + '\n';
             }
             tbot.sendMessage(msg.sender.id, text);
@@ -317,6 +353,22 @@ private:
         //---------------------------------------------------------------------
         cb.add("/currtemp", "Replies the current temperature", [&](const TBMessage &msg){
             tbot.sendMessage(msg.sender.id, String(curtemp) + "°C");
+        });
+        //---------------------------------------------------------------------
+        cb.add("/monitor", "Start monitoring the temperature.", [&](const TBMessage &msg){
+            monitorings.push_back(MonitorData{msg.sender.id, 0});
+        });
+        //---------------------------------------------------------------------
+        cb.add("monitor_stop", [&](const TBMessage& msg){
+            auto it = std::find_if(monitorings.begin(), monitorings.end(), [&msg](const MonitorData& md){
+                return md.user_id == msg.sender.id;
+            });
+            if(it == monitorings.end())
+                return;
+            MonitorData md = *it;
+            std::swap(*it, monitorings.back());
+            monitorings.pop_back();
+            tbot.deleteMessage(md.user_id, md.msg_id);
         });
     }
 
