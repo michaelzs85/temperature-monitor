@@ -12,14 +12,74 @@
 #include <Chatter.hpp>
 #include <unordered_set>
 
-#include <FS.h>
 #include <ArduinoJson.hpp>
+#include <FS.h>
 
 
 struct ProjectConfig
 {
     String bot_token;
 };
+
+struct User
+{
+    int32_t user_id;
+    float too_cold;
+    float too_hot;
+};
+
+bool same_id(const User &lhs, const User &rhs) { return lhs.user_id == rhs.user_id; }
+
+float configureTemp(CTBot &tbot, decltype(TBContact::id) recipient, float init, const char *text)
+{
+    // Set up the temperature keyboard
+    CTBotInlineKeyboard kbd;
+    kbd.addButton("-1", "dec", CTBotKeyboardButtonQuery);
+    kbd.addButton("-.1", "dec.1", CTBotKeyboardButtonQuery);
+    kbd.addButton("temp°C", "accept", CTBotKeyboardButtonQuery); // "temp" is meant to be replaced by an actual temperature value
+    kbd.addButton("+.1", "inc.1", CTBotKeyboardButtonQuery);
+    kbd.addButton("+1", "inc", CTBotKeyboardButtonQuery);
+    String kbdjson = kbd.getJSON();
+
+
+    String actkbd = kbdjson;
+    actkbd.replace("temp", String(init));
+    int32_t msgid = tbot.sendMessage(recipient, text, actkbd);
+
+    bool config_finished = false;
+    TBMessage msg;
+    while(!config_finished)
+    {
+        if(tbot.getNewMessage(msg))
+        {
+            if(msg.messageType != CTBotMessageQuery)
+            {
+                tbot.sendMessage(recipient, "Use the inline buttons to configure a value, press "
+                                            "the value to accept.");
+                continue;
+            }
+            if(msg.callbackQueryData == "dec")
+                init -= 1.0f;
+            else if(msg.callbackQueryData == "dec.1")
+                init -= .1f;
+            else if(msg.callbackQueryData == "accept")
+                config_finished = true;
+            else if(msg.callbackQueryData == "inc.1")
+                init += 0.1f;
+            else if(msg.callbackQueryData == "inc")
+                init += 1.0f;
+            if(!config_finished)
+            {
+                actkbd = kbdjson;
+                actkbd.replace("temp", String(init));
+                tbot.editKeyboard(msg.sender.id, msgid, actkbd);
+            }
+            tbot.endQuery(msg.callbackQueryID, "");
+        }
+        delay(50);
+    }
+    return init;
+}
 
 struct
 {
@@ -63,30 +123,23 @@ struct
         WiFi.setOutputPower(10);
 
         // load project configuration
-        if(!SPIFFS.begin()) Serial.println("Error: File System not ready!");
+        if(!SPIFFS.begin())
+            Serial.println("Error: File System not ready!");
         ProjectConfig cfg = load_config(F("/config.json"));
         SPIFFS.end();
-        
+
         // configure telegram bot
         tbot.setTelegramToken(cfg.bot_token);
 
         add_chatbot_cmds();
-
     }
 
     void loop()
     {
         handleTelegramMessages();
         float temp = getTemperatureCelsius();
-        if(temp > 30.0f)
-        {
-            Serial.println("Warning the temperature is dangerously high");
-        }
         Serial.println(temp);
-        for(auto registered_user : registered_ids)
-        {
-            tbot.sendMessage(registered_user, String(temp));
-        }
+        handleRegisteredUsers(temp);
         delay(10000);
         // process: enable wifi, notify, disable wifi
         // (deep) sleep
@@ -99,7 +152,7 @@ private:
         return temp_sensors.getTempC(&temperature_sensor_address);
     }
 
-    ProjectConfig load_config(const String& filename)
+    ProjectConfig load_config(const String &filename)
     {
         ProjectConfig cfg;
 
@@ -116,7 +169,7 @@ private:
         return cfg;
     }
 
-    std::unordered_set<int32_t> registered_ids;
+    std::vector<User> registered_users;
 
     void handleTelegramMessages()
     {
@@ -124,6 +177,21 @@ private:
         while(tbot.getNewMessage(msg))
         {
             cb.handle_incomoing_message(msg.text, msg);
+        }
+    }
+
+    void handleRegisteredUsers(float temp)
+    {
+        for(const User& usr : registered_users)
+        {
+            if(temp <= usr.too_cold)
+            {
+                tbot.sendMessage(usr.user_id, String(":warning: Temperature Warning! :snowflake: ") +  String(temp) + "°C" );
+            }
+            if(temp >= usr.too_hot)
+            {
+                tbot.sendMessage(usr.user_id, String(":warning: Temperature Warning! :fire:") +  String(temp) + "°C" );    
+            }
         }
     }
 
@@ -135,21 +203,46 @@ private:
             tbot.sendMessage(msg.sender.id, text);
         });
         cb.add("/register", "Register to get temperature updates.", [&](const TBMessage &msg) {
-            if(registered_ids.insert(msg.sender.id).second)
+            String preamble("Configure at which temperatures you want to receive warnings:\n");
+            tbot.sendMessage(msg.sender.id, preamble);
+            float lower = configureTemp(tbot, msg.sender.id, 1.0f, "Configure the lower temperature boundary:");
+            float upper = configureTemp(tbot, msg.sender.id, 30.0f, "Configure the upper temperature boundary:");
+
+            Serial.println("Configured boundary values are: " + String(lower) + " and " + String(upper));
+
+            User new_registration{ msg.sender.id, lower, upper };
+
+            bool updated_exisiting = false;
+            for(User &usr : registered_users)
             {
-                tbot.sendMessage(msg.sender.id,
-                                 "You have now been registered to get temperature updates!");
-                Serial.print("A new user has been registered: ");
-                Serial.print(msg.sender.id);
+                if(same_id(usr, new_registration))
+                {
+                    usr = new_registration;
+                    updated_exisiting = true;
+                }
             }
+            if(!updated_exisiting)
+            {
+                registered_users.push_back(std::move(new_registration));
+            }
+
+            tbot.sendMessage(new_registration.user_id,
+                             "You will now receive an alert when the temperature falls below " +
+                             String(new_registration.too_cold) + "°C or rises above " +
+                             String(new_registration.too_hot) + "°C");
         });
         cb.add("/unregister", "Don't get any more temperature updates.", [&](const TBMessage &msg) {
-            auto it = registered_ids.find(msg.sender.id);
-            if(it != end(registered_ids))
+            auto it = std::find_if(registered_users.begin(), registered_users.end(), [&msg](const User& usr){
+                return usr.user_id == msg.sender.id;
+            });
+            if(it == registered_users.end())
+                return; // Not a registered user, nothing to do
+            if(it != registered_users.end()-1)
             {
-                registered_ids.erase(it);
-                tbot.sendMessage(msg.sender.id, "You will no longer receive temperature updates!");
+                std::swap(*it, registered_users.back());
             }
+            registered_users.pop_back();
+            tbot.sendMessage(msg.sender.id, "No more warnings for you!");
         });
     }
 
