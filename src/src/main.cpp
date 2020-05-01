@@ -182,16 +182,13 @@ private:
 
     void handleRegisteredUsers(float temp)
     {
-        for(const User& usr : registered_users)
+        for(const User &usr : registered_users)
         {
             if(temp <= usr.too_cold)
-            {
-                tbot.sendMessage(usr.user_id, String(":warning: Temperature Warning! :snowflake: ") +  String(temp) + "°C" );
-            }
+                tbot.sendMessage(usr.user_id,
+                                 String("⚠️ Temperature Warning! ❄️ ") + String(temp) + "°C");
             if(temp >= usr.too_hot)
-            {
-                tbot.sendMessage(usr.user_id, String(":warning: Temperature Warning! :fire:") +  String(temp) + "°C" );    
-            }
+                tbot.sendMessage(usr.user_id, String("⚠️ Temperature Warning! 🔥") + String(temp) + "°C");
         }
     }
 
@@ -202,6 +199,7 @@ private:
                          "/register and /unregister" };
             tbot.sendMessage(msg.sender.id, text);
         });
+        //---------------------------------------------------------------------
         cb.add("/register", "Register to get temperature updates.", [&](const TBMessage &msg) {
             String preamble("Configure at which temperatures you want to receive warnings:\n");
             tbot.sendMessage(msg.sender.id, preamble);
@@ -231,13 +229,13 @@ private:
                              String(new_registration.too_cold) + "°C or rises above " +
                              String(new_registration.too_hot) + "°C");
         });
+        //---------------------------------------------------------------------
         cb.add("/unregister", "Don't get any more temperature updates.", [&](const TBMessage &msg) {
-            auto it = std::find_if(registered_users.begin(), registered_users.end(), [&msg](const User& usr){
-                return usr.user_id == msg.sender.id;
-            });
+            auto it = std::find_if(registered_users.begin(), registered_users.end(),
+                                   [&msg](const User &usr) { return usr.user_id == msg.sender.id; });
             if(it == registered_users.end())
                 return; // Not a registered user, nothing to do
-            if(it != registered_users.end()-1)
+            if(it != registered_users.end() - 1)
             {
                 std::swap(*it, registered_users.back());
             }
