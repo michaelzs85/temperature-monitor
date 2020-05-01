@@ -1,4 +1,6 @@
 AccessModifierOffset: -4
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
 AlignEscapedNewlines: Left
 AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: true
@@ -28,7 +30,7 @@ ConstructorInitializerIndentWidth: 0
 ContinuationIndentWidth: 0
 Cpp11BracedListStyle: false
 DerivePointerAlignment: false
-PointerAlignment: Right
+PointerAlignment: Left
 IndentCaseLabels: false
 IndentWrappedFunctionNames: true
 IndentWidth: 4

@@ -15,9 +15,9 @@
 #include <ArduinoJson.hpp>
 #include <FS.h>
 
-const char* jname_user_id PROGMEM = "user_id";
-const char* jname_too_cold PROGMEM= "too_cold";
-const char* jname_too_hot PROGMEM  = "too_hot";
+const char* jname_user_id         PROGMEM = "user_id";
+const char* jname_too_cold        PROGMEM = "too_cold";
+const char* jname_too_hot         PROGMEM = "too_hot";
 const char* msg_file_system_error PROGMEM = "Error: File System not ready!";
 
 static const uint32_t time_between_warnings_ms = 1000 * 60 * 1; // = 1min
@@ -30,8 +30,8 @@ struct ProjectConfig
 struct User
 {
     int32_t user_id;
-    float too_cold;
-    float too_hot;
+    float   too_cold;
+    float   too_hot;
 };
 
 struct MonitorData
@@ -40,24 +40,24 @@ struct MonitorData
     int32_t msg_id;
 };
 
-bool same_id(const User &lhs, const User &rhs) { return lhs.user_id == rhs.user_id; }
+bool same_id(const User& lhs, const User& rhs) { return lhs.user_id == rhs.user_id; }
 
-void toJson(const User &usr, JsonArray &arr)
+void toJson(const User& usr, JsonArray& arr)
 {
-    JsonObject &obj = arr.createNestedObject();
-    obj[jname_user_id] = String(usr.user_id);
+    JsonObject& obj     = arr.createNestedObject();
+    obj[jname_user_id]  = String(usr.user_id);
     obj[jname_too_cold] = String(usr.too_cold);
-    obj[jname_too_hot] = String(usr.too_hot);
+    obj[jname_too_hot]  = String(usr.too_hot);
 };
 
-String botCommandsJson(const Chatter<String, void, const TBMessage &>& cb)
+String botCommandsJson(const Chatter<String, void, const TBMessage&>& cb)
 {
     DynamicJsonBuffer buffer;
-    JsonArray& arr = buffer.createArray();
+    JsonArray&        arr = buffer.createArray();
     for(auto cmd : cb.commands)
     {
-        JsonObject& obj = arr.createNestedObject();
-        obj["command"] = cmd.cmd_text;
+        JsonObject& obj    = arr.createNestedObject();
+        obj["command"]     = cmd.cmd_text;
         obj["description"] = cmd.help_text;
     }
     String str_json;
@@ -65,7 +65,7 @@ String botCommandsJson(const Chatter<String, void, const TBMessage &>& cb)
     return str_json;
 }
 
-float configureTemp(CTBot &tbot, decltype(TBContact::id) recipient, float init, const char *text)
+float configureTemp(CTBot& tbot, decltype(TBContact::id) recipient, float init, const char* text)
 {
     String const help_text(F("\n\nUse the buttons below to adjust the temperature."));
     // Set up the temperature keyboard
@@ -82,7 +82,7 @@ float configureTemp(CTBot &tbot, decltype(TBContact::id) recipient, float init, 
 
     int32_t msgid = tbot.sendMessage(recipient, strtext + help_text, kbdjson);
 
-    bool config_finished = false;
+    bool      config_finished = false;
     TBMessage msg;
     while(!config_finished)
     {
@@ -131,12 +131,12 @@ struct
         EarlyInit() { Serial.begin(230400); }
     } _;
 
-    OneWire ow{ D3 };
+    OneWire           ow{ D3 };
     DallasTemperature temp_sensors{ &ow };
-    uint8_t temperature_sensor_address{ 0xff };
+    uint8_t           temperature_sensor_address{ 0xff };
 
-    CTBot tbot;
-    Chatter<String, void, const TBMessage &> cb;
+    CTBot                                   tbot;
+    Chatter<String, void, const TBMessage&> cb;
 
     void setup()
     {
@@ -146,9 +146,9 @@ struct
         digitalWrite(LED_BUILTIN, HIGH);
 
         // WiFi STA setup
-        IPAddress address(192, 168, 0, 1);
-        IPAddress &gateway = address;
-        IPAddress subnet(255, 255, 255, 0);
+        IPAddress  address(192, 168, 0, 1);
+        IPAddress& gateway = address;
+        IPAddress  subnet(255, 255, 255, 0);
 
         WiFiManager wifiManager;
         wifiManager.setAPStaticIPConfig(address, gateway, subnet);
@@ -198,14 +198,14 @@ private:
         return temp_sensors.getTempC(&temperature_sensor_address);
     }
 
-    ProjectConfig load_config(const String &filename)
+    ProjectConfig load_config(const String& filename)
     {
         ProjectConfig cfg;
 
-        File cfgfile = SPIFFS.open(filename, "r");
+        File                  cfgfile = SPIFFS.open(filename, "r");
         StaticJsonBuffer<512> json_bfr;
 
-        JsonObject &json_doc = json_bfr.parseObject(cfgfile);
+        JsonObject& json_doc = json_bfr.parseObject(cfgfile);
         if(!json_doc.success())
             Serial.println(F("Failed to read configuration file!"));
 
@@ -215,10 +215,10 @@ private:
         return cfg;
     }
 
-    std::vector<User> registered_users;
+    std::vector<User>                          registered_users;
     std::map<decltype(User::user_id), int64_t> last_warning;
-    float curtemp;
-    std::vector<MonitorData> monitorings;
+    float                                      curtemp;
+    std::vector<MonitorData>                   monitorings;
 
 
     void handleTelegramMessages()
@@ -228,20 +228,19 @@ private:
         {
             if(msg.messageType == CTBotMessageType::CTBotMessageText)
                 cb.handle_incomoing_message(msg.text, msg);
-            else if (msg.messageType == CTBotMessageType::CTBotMessageQuery)
+            else if(msg.messageType == CTBotMessageType::CTBotMessageQuery)
             {
                 cb.handle_incomoing_message(msg.callbackQueryData, msg);
             }
-            
         }
     }
 
     void handleRegisteredUsers(float temp)
     {
-        for(const User &usr : registered_users)
+        for(const User& usr : registered_users)
         {
             int64_t now = millis();
-            auto it = last_warning.find(usr.user_id);
+            auto    it  = last_warning.find(usr.user_id);
             if(it != last_warning.end())
                 if((now - it->second) < time_between_warnings_ms)
                     continue;
@@ -267,9 +266,9 @@ private:
         String text = "Live Temperature: " + String(temp) + "°C";
         for(MonitorData& md : monitorings)
         {
-            if (md.msg_id == 0)
+            if(md.msg_id == 0)
             {
-                md.msg_id = tbot.sendMessage(md.user_id, text, kbd); 
+                md.msg_id = tbot.sendMessage(md.user_id, text, kbd);
             }
             else
             {
@@ -281,31 +280,32 @@ private:
 
     void add_chatbot_cmds()
     {
-        cb.add("/start", "Show the welcome message.", [&](const TBMessage &msg) {
-            String text{"Welcome to TemperatureMonitor!\ncurrently supported commands are:\n"};
-            for(auto cmd :cb.commands)
+        cb.add("/start", "Show the welcome message.", [&](const TBMessage& msg) {
+            String text{ "Welcome to TemperatureMonitor!\ncurrently supported commands are:\n" };
+            for(auto cmd : cb.commands)
             {
-                if(cmd.help_text.isEmpty()) continue;
+                if(cmd.help_text.isEmpty())
+                    continue;
                 text += cmd.cmd_text + ' ' + cmd.help_text + '\n';
             }
             tbot.sendMessage(msg.sender.id, text);
         });
         //---------------------------------------------------------------------
-        cb.add("/register", "Register to get temperature updates.", [&](const TBMessage &msg) {
+        cb.add("/register", "Register to get temperature updates.", [&](const TBMessage& msg) {
             String preamble("Configure at which temperatures you want to receive warnings:\n");
             tbot.sendMessage(msg.sender.id, preamble);
             float lower = configureTemp(tbot, msg.sender.id,
                                         1.0f, "Send a warning when the temperature falls below <temp>°C!");
             float upper = configureTemp(tbot, msg.sender.id,
                                         30.0f, "Send a warning when the temperature rises above <temp>°C!");
-            User new_registration{ msg.sender.id, lower, upper };
+            User  new_registration{ msg.sender.id, lower, upper };
 
             bool updated_exisiting = false;
-            for(User &usr : registered_users)
+            for(User& usr : registered_users)
             {
                 if(same_id(usr, new_registration))
                 {
-                    usr = new_registration;
+                    usr               = new_registration;
                     updated_exisiting = true;
                 }
             }
@@ -321,9 +321,9 @@ private:
             store_registered_users();
         });
         //---------------------------------------------------------------------
-        cb.add("/unregister", "Don't get any more temperature updates.", [&](const TBMessage &msg) {
+        cb.add("/unregister", "Don't get any more temperature updates.", [&](const TBMessage& msg) {
             auto it = std::find_if(registered_users.begin(), registered_users.end(),
-                                   [&msg](const User &usr) { return usr.user_id == msg.sender.id; });
+                                   [&msg](const User& usr) { return usr.user_id == msg.sender.id; });
             if(it == registered_users.end())
             {
                 tbot.sendMessage(msg.sender.id, "You weren't registered anyway!");
@@ -337,12 +337,13 @@ private:
             tbot.sendMessage(msg.sender.id, "No more warnings for you!");
         });
         //---------------------------------------------------------------------
-        cb.add("/info", "Get information about your registration status", [&](const TBMessage &msg) {
+        cb.add("/info", "Get information about your registration status", [&](const TBMessage& msg) {
             auto it = std::find_if(registered_users.begin(), registered_users.end(),
-                                   [&msg](const User &usr) { return usr.user_id == msg.sender.id; });
+                                   [&msg](const User& usr) { return usr.user_id == msg.sender.id; });
             if(it == registered_users.end())
             {
-                tbot.sendMessage(msg.sender.id, String("Hi ") + msg.sender.firstName + ", you are currently not a registered user!");
+                tbot.sendMessage(msg.sender.id, String("Hi ") + msg.sender.firstName +
+                                                ", you are currently not a registered user!");
                 return;
             }
             tbot.sendMessage(msg.sender.id,
@@ -351,16 +352,15 @@ private:
                              "°C. Use /register to change the values!");
         });
         //---------------------------------------------------------------------
-        cb.add("/currtemp", "Replies the current temperature", [&](const TBMessage &msg){
-            tbot.sendMessage(msg.sender.id, String(curtemp) + "°C");
+        cb.add("/currtemp", "Replies the current temperature",
+               [&](const TBMessage& msg) { tbot.sendMessage(msg.sender.id, String(curtemp) + "°C"); });
+        //---------------------------------------------------------------------
+        cb.add("/monitor", "Start monitoring the temperature.", [&](const TBMessage& msg) {
+            monitorings.push_back(MonitorData{ msg.sender.id, 0 });
         });
         //---------------------------------------------------------------------
-        cb.add("/monitor", "Start monitoring the temperature.", [&](const TBMessage &msg){
-            monitorings.push_back(MonitorData{msg.sender.id, 0});
-        });
-        //---------------------------------------------------------------------
-        cb.add("monitor_stop", [&](const TBMessage& msg){
-            auto it = std::find_if(monitorings.begin(), monitorings.end(), [&msg](const MonitorData& md){
+        cb.add("monitor_stop", [&](const TBMessage& msg) {
+            auto it = std::find_if(monitorings.begin(), monitorings.end(), [&msg](const MonitorData& md) {
                 return md.user_id == msg.sender.id;
             });
             if(it == monitorings.end())
@@ -374,12 +374,12 @@ private:
 
     void store_registered_users()
     {
-        Serial.println("store_registered_users begin"); 
+        Serial.println("store_registered_users begin");
         DynamicJsonBuffer jbuffer;
-        JsonObject &root = jbuffer.createObject();
-        JsonArray &arr = root.createNestedArray("registration_data");
+        JsonObject&       root = jbuffer.createObject();
+        JsonArray&        arr  = root.createNestedArray("registration_data");
         Serial.println('A');
-        for(const User &usr : registered_users)
+        for(const User& usr : registered_users)
         {
             Serial.println('B');
             toJson(usr, arr);
@@ -397,7 +397,7 @@ private:
 
         file.close();
         SPIFFS.end();
-        Serial.println("store_registered_users end"); 
+        Serial.println("store_registered_users end");
     }
 
     void load_registered_users()
@@ -410,19 +410,19 @@ private:
 
         File file = SPIFFS.open("/reg_users", "r");
 
-        JsonObject &json_doc = jbuffer.parseObject(file);
+        JsonObject& json_doc = jbuffer.parseObject(file);
         if(!json_doc.success())
         {
             Serial.println(F("Failed to read registered users file!"));
             return;
         }
 
-        JsonArray &arr = json_doc["registration_data"];
+        JsonArray& arr = json_doc["registration_data"];
         for(auto obj : arr)
         {
-            String str_user_id = obj[jname_user_id] | "";
+            String str_user_id  = obj[jname_user_id] | "";
             String str_too_cold = obj[jname_too_cold] | "";
-            String str_too_hot = obj[jname_too_hot] | "";
+            String str_too_hot  = obj[jname_too_hot] | "";
             if(str_user_id.isEmpty() || str_too_cold.isEmpty() or str_too_hot.isEmpty())
                 continue;
             registered_users.push_back(User{ static_cast<decltype(User::user_id)>(str_user_id.toInt()),
